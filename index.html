@@ -2,45 +2,37 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de Coordenadas</title>
+<title>Buscar Coordenadas</title>
 
 <style>
-body {
+body{
     font-family: Arial, sans-serif;
-    max-width: 1200px;
-    margin: auto;
-    padding: 20px;
+    margin:20px;
 }
 
-textarea {
-    width: 100%;
-    height: 250px;
-    padding: 10px;
+textarea{
+    width:100%;
+    height:200px;
 }
 
-button {
-    padding: 10px 20px;
-    margin: 10px 5px 10px 0;
-    cursor: pointer;
+button{
+    padding:10px;
+    margin:10px 5px;
 }
 
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin-top:20px;
 }
 
-th, td {
-    border: 1px solid #ccc;
-    padding: 8px;
-}
-
-th {
-    background: #f2f2f2;
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
 }
 </style>
 </head>
+
 <body>
 
 <h2>Buscar Coordenadas</h2>
@@ -55,12 +47,62 @@ th {
 Buscar Coordenadas
 </button>
 
-<button onclick="copiarExcel()">
-Copiar para Excel
-</button>
-
 <div id="resultado"></div>
 
 <script>
 
-let 
+async function buscarCoordenadas() {
+
+    const linhas =
+        document
+        .getElementById("enderecos")
+        .value
+        .split("\n")
+        .filter(x => x.trim());
+
+    let html =
+    "<table><tr><th>Endereço</th><th>Latitude</th><th>Longitude</th></tr>";
+
+    for(const endereco of linhas){
+
+        try{
+
+            const resposta = await fetch(
+                "https://nominatim.openstreetmap.org/search?format=jsonv2&q=" +
+                encodeURIComponent(endereco)
+            );
+
+            const dados = await resposta.json();
+
+            if(dados.length > 0){
+
+                html += `
+                <tr>
+                    <td>${endereco}</td>
+                    <td>${dados[0].lat}</td>
+                    <td>${dados[0].lon}</td>
+                </tr>`;
+            }
+
+        }catch(e){
+
+            html += `
+            <tr>
+                <td>${endereco}</td>
+                <td>ERRO</td>
+                <td>ERRO</td>
+            </tr>`;
+        }
+
+    }
+
+    html += "</table>";
+
+    document.getElementById("resultado").innerHTML =
+    html;
+}
+
+</script>
+
+</body>
+</html>
