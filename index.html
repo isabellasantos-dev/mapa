@@ -18,6 +18,7 @@ textarea{
 button{
     padding:10px;
     margin-top:10px;
+    margin-right:10px;
 }
 
 table{
@@ -26,16 +27,24 @@ table{
     margin-top:20px;
 }
 
-th,td{
+th, td{
     border:1px solid #ccc;
     padding:8px;
+}
+
+#status{
+    margin-top:15px;
+    font-weight:bold;
+    color:#0066cc;
 }
 </style>
 </head>
 
 <body>
 
-<h2>Buscar Coordenadas (Mapbox)</h2>
+<h2>Geocodificador Mapbox</h2>
+
+<h3>Busca Manual</h3>
 
 <p>Cole um endereço por linha:</p>
 
@@ -47,13 +56,78 @@ th,td{
 Buscar Coordenadas
 </button>
 
+<hr>
+
+<h3>Importar Planilha Excel</h3>
+
+<input type="file" id="arquivoExcel" accept=".xlsx,.csv">
+
+<br><br>
+
+<button onclick="processarPlanilha()">
+Processar Planilha
+</button>
+
+<div id="status"></div>
+
 <div id="resultado"></div>
+
+https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.jsscript>
 
 <script>
 
 const TOKEN = "pk.eyJ1IjoiaXNhYmVsbGFtZW5kZXMiLCJhIjoiY211MnAxcDNrMDF6azJ4cHMwb2k5ejA4NCJ9.ViXe6qaQ5dYB0iKFljqIwQ";
 
-async function buscarCoordenadas() {
+let resultadosPlanilha = [];
+
+async function geocodificarEndereco(endereco){
+
+    try{
+
+        const url =
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(endereco)}.json?access_token=${TOKEN}&limit=1&language=pt`;
+
+        const resposta = await fetch(url);
+
+        if(!resposta.ok){
+            throw new Error(`Erro HTTP ${resposta.status}`);
+        }
+
+        const dados = await resposta.json();
+
+        if(dados.features && dados.features.length > 0){
+
+            const resultado = dados.features[0];
+
+            return {
+                latitude: resultado.center[1],
+                longitude: resultado.center[0],
+                status: "success",
+                matched_address: resultado.place_name
+            };
+
+        }
+
+        return {
+            latitude: "",
+            longitude: "",
+            status: "not_found",
+            matched_address: ""
+        };
+
+    }catch(e){
+
+        return {
+            latitude: "",
+            longitude: "",
+            status: "error",
+            matched_address: e.message
+        };
+
+    }
+}
+
+async function buscarCoordenadas(){
 
     const linhas = document
         .getElementById("enderecos")
@@ -62,56 +136,186 @@ async function buscarCoordenadas() {
         .filter(x => x.trim());
 
     let html =
-        "<table><tr><th>Endereço</th><th>Latitude</th><th>Longitude</th></tr>";
+    `
+    <table>
+        <tr>
+            <th>Endereço</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Status</th>
+        </tr>
+    `;
 
     for(const endereco of linhas){
 
-        try{
+        const resultado =
+            await geocodificarEndereco(endereco);
 
-            const url =
-                `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(endereco)}.json?access_token=${TOKEN}&limit=1`;
-
-            const resposta = await fetch(url);
-
-            const dados = await resposta.json();
-
-            if(dados.features.length){
-
-                const lon = dados.features[0].center[0];
-                const lat = dados.features[0].center[1];
-
-                html += `
-                <tr>
-                    <td>${endereco}</td>
-                    <td>${lat}</td>
-                    <td>${lon}</td>
-                </tr>`;
-            }
-            else{
-
-                html += `
-                <tr>
-                    <td>${endereco}</td>
-                    <td>Não encontrado</td>
-                    <td>Não encontrado</td>
-                </tr>`;
-            }
-
-        } catch(e){
-
-            html += `
-            <tr>
-                <td>${endereco}</td>
-                <td>Erro</td>
-                <td>Erro</td>
-            </tr>`;
-        }
-
+        html += `
+        <tr>
+            <td>${endereco}</td>
+            <td>${resultado.latitude}</td>
+            <td>${resultado.longitude}</td>
+            <td>${resultado.status}</td>
+        </tr>
+        `;
     }
 
     html += "</table>";
 
-    document.getElementById("resultado").innerHTML = html;
+    document.getElementById(
+        "resultado"
+    ).innerHTML = html;
+}
+
+async function processarPlanilha(){
+
+    const arquivo =
+        document.getElementById("arquivoExcel")
+        .files[0];
+
+    if(!arquivo){
+
+        alert("Selecione um arquivo Excel.");
+
+        return;
+    }
+
+    document.getElementById("status")
+    .innerText = "Lendo planilha...";
+
+    resultadosPlanilha = [];
+
+    const buffer =
+        await arquivo.arrayBuffer();
+
+    const workbook =
+        XLSX.read(buffer);
+
+    const sheet =
+        workbook.Sheets[
+            workbook.SheetNames[0]
+        ];
+
+    const dados =
+        XLSX.utils.sheet_to_json(sheet);
+
+    const total = dados.length;
+
+    let contador = 0;
+
+    for(const linha of dados){
+
+        contador++;
+
+        document.getElementById("status")
+        .innerText =
+        `Processando ${contador} de ${total}`;
+
+        const endereco =
+            linha.endereco ||
+            linha.Endereço ||
+            linha.ENDERECO ||
+            linha.ENDEREÇO;
+
+        if(!endereco){
+
+            resultadosPlanilha.push({
+                ...linha,
+                latitude:"",
+                longitude:"",
+                geocode_status:"sem_endereco",
+                matched_address:""
+            });
+
+            continue;
+        }
+
+        const resultado =
+            await geocodificarEndereco(endereco);
+
+        resultadosPlanilha.push({
+
+            ...linha,
+
+            latitude:
+                resultado.latitude,
+
+            longitude:
+                resultado.longitude,
+
+            geocode_status:
+                resultado.status,
+
+            matched_address:
+                resultado.matched_address,
+
+            processed_at:
+                new Date().toLocaleString("pt-BR")
+        });
+    }
+
+    exibirResultados();
+
+    exportarResultado();
+
+    document.getElementById("status")
+    .innerText =
+    "Concluído! Planilha gerada com sucesso.";
+}
+
+function exibirResultados(){
+
+    let html =
+    `
+    <table>
+        <tr>
+            <th>Endereço</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Status</th>
+        </tr>
+    `;
+
+    resultadosPlanilha.forEach(item => {
+
+        html += `
+        <tr>
+            <td>${item.endereco || item.Endereço || ""}</td>
+            <td>${item.latitude}</td>
+            <td>${item.longitude}</td>
+            <td>${item.geocode_status}</td>
+        </tr>
+        `;
+    });
+
+    html += "</table>";
+
+    document.getElementById(
+        "resultado"
+    ).innerHTML = html;
+}
+
+function exportarResultado(){
+
+    const wb =
+        XLSX.utils.book_new();
+
+    const ws =
+        XLSX.utils.json_to_sheet(
+            resultadosPlanilha
+        );
+
+    XLSX.utils.book_append_sheet(
+        wb,
+        ws,
+        "Resultados"
+    );
+
+    XLSX.writeFile(
+        wb,
+        "enderecos_geocodificados.xlsx"
+    );
 }
 
 </script>
