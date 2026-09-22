@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
+
 <meta charset="UTF-8">
+
 <title>Geocodificador Mapbox</title>
 
 <style>
+
 body{
-    font-family: Arial, sans-serif;
+    font-family:Arial,sans-serif;
     margin:20px;
 }
 
@@ -27,7 +31,7 @@ table{
     margin-top:20px;
 }
 
-th, td{
+th,td{
     border:1px solid #ccc;
     padding:8px;
 }
@@ -37,12 +41,14 @@ th, td{
     font-weight:bold;
     color:#0066cc;
 }
+
 </style>
+
 </head>
 
 <body>
 
-<h2>Geocodificador Mapbox</h2>
+<h2>Geocodificador de Endereços</h2>
 
 <h3>Busca Manual</h3>
 
@@ -58,9 +64,13 @@ Buscar Coordenadas
 
 <hr>
 
-<h3>Importar Planilha Excel</h3>
+<h3>Importar Planilha</h3>
 
-<input type="file" id="arquivoExcel" accept=".xlsx,.csv">
+<input
+type="file"
+id="arquivoExcel"
+accept=".xlsx,.csv"
+/>
 
 <br><br>
 
@@ -71,72 +81,137 @@ Processar Planilha
 <div id="status"></div>
 
 <div id="resultado"></div>
- 
+
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
- 
+
 <script>
 
 const TOKEN = "pk.eyJ1IjoiaXNhYmVsbGFtZW5kZXMiLCJhIjoiY211MnAxcDNrMDF6azJ4cHMwb2k5ejA4NCJ9.ViXe6qaQ5dYB0iKFljqIwQ";
+
+const cacheGeocode = {};
 
 let resultadosPlanilha = [];
 
 async function geocodificarEndereco(endereco){
 
+    const chave =
+        endereco
+        .trim()
+        .toUpperCase();
+
+    if(cacheGeocode[chave]){
+        return cacheGeocode[chave];
+    }
+
     try{
 
-        const url =
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(endereco)}.json?access_token=${TOKEN}&limit=1&language=pt`;
+        const params =
+            new URLSearchParams({
 
-        const resposta = await fetch(url);
+                access_token: TOKEN,
+
+                language: "pt",
+
+                country: "br",
+
+                limit: 5
+
+            });
+
+        const url =
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(endereco)}.json?${params}`;
+
+        const resposta =
+            await fetch(url);
 
         if(!resposta.ok){
-            throw new Error(`Erro HTTP ${resposta.status}`);
+
+            throw new Error(
+                `Erro HTTP ${resposta.status}`
+            );
+
         }
 
-        const dados = await resposta.json();
+        const dados =
+            await resposta.json();
 
-        if(dados.features && dados.features.length > 0){
+        if(
+            dados.features &&
+            dados.features.length > 0
+        ){
 
-            const resultado = dados.features[0];
+            let melhor =
+                dados.features[0];
 
-            return {
-                latitude: resultado.center[1],
-                longitude: resultado.center[0],
-                status: "success",
-                matched_address: resultado.place_name
+            for(const item of dados.features){
+
+                if(
+                    (item.relevance || 0)
+                    >
+                    (melhor.relevance || 0)
+                ){
+                    melhor = item;
+                }
+
+            }
+
+            const retorno = {
+
+                latitude:
+                    melhor.center[1],
+
+                longitude:
+                    melhor.center[0],
+
+                matched_address:
+                    melhor.place_name,
+
+                status:
+                    "success"
+
             };
+
+            cacheGeocode[chave] =
+                retorno;
+
+            return retorno;
 
         }
 
         return {
-            latitude: "",
-            longitude: "",
-            status: "not_found",
-            matched_address: ""
+
+            latitude:"",
+            longitude:"",
+            matched_address:"",
+            status:"not_found"
+
         };
 
     }catch(e){
 
         return {
-            latitude: "",
-            longitude: "",
-            status: "error",
-            matched_address: e.message
+
+            latitude:"",
+            longitude:"",
+            matched_address:"",
+            status:"error"
+
         };
 
     }
+
 }
 
 async function buscarCoordenadas(){
 
-    const linhas = document
+    const linhas =
+        document
         .getElementById("enderecos")
         .value
         .split("\n")
         .filter(x => x.trim());
 
-    let html =
-    `
+    let html = `
     <table>
         <tr>
             <th>Endereço</th>
@@ -148,41 +223,49 @@ async function buscarCoordenadas(){
 
     for(const endereco of linhas){
 
-        const resultado =
-            await geocodificarEndereco(endereco);
+        const r =
+            await geocodificarEndereco(
+                endereco
+            );
 
         html += `
         <tr>
             <td>${endereco}</td>
-            <td>${resultado.latitude}</td>
-            <td>${resultado.longitude}</td>
-            <td>${resultado.status}</td>
+            <td>${r.latitude}</td>
+            <td>${r.longitude}</td>
+            <td>${r.status}</td>
         </tr>
         `;
+
     }
 
     html += "</table>";
 
-    document.getElementById(
-        "resultado"
-    ).innerHTML = html;
+    document
+        .getElementById("resultado")
+        .innerHTML = html;
 }
 
 async function processarPlanilha(){
 
     const arquivo =
-        document.getElementById("arquivoExcel")
+        document
+        .getElementById("arquivoExcel")
         .files[0];
 
     if(!arquivo){
 
-        alert("Selecione um arquivo Excel.");
+        alert(
+            "Selecione uma planilha."
+        );
 
         return;
     }
 
-    document.getElementById("status")
-    .innerText = "Lendo planilha...";
+    document
+        .getElementById("status")
+        .innerText =
+        "Lendo planilha...";
 
     resultadosPlanilha = [];
 
@@ -198,9 +281,12 @@ async function processarPlanilha(){
         ];
 
     const dados =
-        XLSX.utils.sheet_to_json(sheet);
+        XLSX.utils.sheet_to_json(
+            sheet
+        );
 
-    const total = dados.length;
+    const total =
+        dados.length;
 
     let contador = 0;
 
@@ -208,71 +294,93 @@ async function processarPlanilha(){
 
         contador++;
 
-        document.getElementById("status")
+        document
+        .getElementById("status")
         .innerText =
         `Processando ${contador} de ${total}`;
 
         const endereco =
+
             linha.endereco ||
+
             linha.Endereço ||
+
             linha.ENDERECO ||
-            linha.ENDEREÇO;
+
+            linha.ENDEREÇO ||
+
+            linha.Nome ||
+
+            linha.nome ||
+
+            "";
 
         if(!endereco){
 
             resultadosPlanilha.push({
-                ...linha,
-                latitude:"",
-                longitude:"",
-                geocode_status:"sem_endereco",
-                matched_address:""
+
+                WKT:"",
+                Nome:"",
+                Status:"sem_endereco"
+
             });
 
             continue;
         }
 
         const resultado =
-            await geocodificarEndereco(endereco);
+            await geocodificarEndereco(
+                endereco
+            );
+
+        const wkt =
+
+            (
+                resultado.longitude &&
+                resultado.latitude
+            )
+
+            ?
+
+            `POINT (${resultado.longitude} ${resultado.latitude})`
+
+            :
+
+            "";
 
         resultadosPlanilha.push({
 
-            ...linha,
+            WKT:
+                wkt,
 
-            latitude:
-                resultado.latitude,
+            Nome:
+                endereco,
 
-            longitude:
-                resultado.longitude,
+            Status:
+                resultado.status
 
-            geocode_status:
-                resultado.status,
-
-            matched_address:
-                resultado.matched_address,
-
-            processed_at:
-                new Date().toLocaleString("pt-BR")
         });
+
     }
 
     exibirResultados();
 
     exportarResultado();
 
-    document.getElementById("status")
-    .innerText =
-    "Concluído! Planilha gerada com sucesso.";
+    document
+        .getElementById("status")
+        .innerText =
+        "Processamento concluído.";
+
 }
 
 function exibirResultados(){
 
-    let html =
-    `
+    let html = `
     <table>
         <tr>
-            <th>Endereço</th>
-            <th>Latitude</th>
-            <th>Longitude</th>
+            <th>WKT</th>
+            <th>Nome</th>
             <th>Status</th>
         </tr>
     `;
@@ -281,19 +389,20 @@ function exibirResultados(){
 
         html += `
         <tr>
-            <td>${item.endereco || item.Endereço || ""}</td>
-            <td>${item.latitude}</td>
-            <td>${item.longitude}</td>
-            <td>${item.geocode_status}</td>
+            <td>${item.WKT}</td>
+            <td>${item.Nome}</td>
+            <td>${item.Status}</td>
         </tr>
         `;
+
     });
 
     html += "</table>";
 
-    document.getElementById(
-        "resultado"
-    ).innerHTML = html;
+    document
+        .getElementById("resultado")
+        .innerHTML = html;
+
 }
 
 function exportarResultado(){
@@ -309,16 +418,18 @@ function exportarResultado(){
     XLSX.utils.book_append_sheet(
         wb,
         ws,
-        "Resultados"
+        "Pontos"
     );
 
     XLSX.writeFile(
         wb,
-        "enderecos_geocodificados.xlsx"
+        "pontos_geocodificados.xlsx"
     );
+
 }
 
 </script>
 
 </body>
+
 </html>
